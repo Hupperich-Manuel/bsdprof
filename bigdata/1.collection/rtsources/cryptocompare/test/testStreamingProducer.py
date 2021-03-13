@@ -11,7 +11,7 @@ class CCStreaming2Kafka(CryptoCompareStreaming):
   _topic = ""
 
   def __init__(self, apiKey, subsMessage):
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     super().__init__(apiKey)
     self._subsMessage = subsMessage
 
