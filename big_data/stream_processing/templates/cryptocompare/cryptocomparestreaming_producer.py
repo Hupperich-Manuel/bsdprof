@@ -46,7 +46,6 @@ class CryptoCompareStreaming:
       message = data_processing(data)
       logging.debug("on_message: %s" % message)
       self._last_message = datetime.now()
-      #self._producer.produce(self._topic, message)
       
   def on_error(self, ws, error):
     logging.debug("on_error method has been called")
