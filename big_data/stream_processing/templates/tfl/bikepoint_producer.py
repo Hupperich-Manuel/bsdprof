@@ -36,10 +36,14 @@ def kafka_producer_decorator(broker, topic):
     '''
 
     if isinstance(content, list):
+      # Getting an array from the source
       for item in content:
         # add your logic to publish into the topic here
         #
         pass
+    elif content!=None:
+      # Getting a single element from the source
+      pass
     else:
       print("No contents received. Nothing will be published into the topic.")
       logging.info("No contents received. Nothing will be published into the topic.")
