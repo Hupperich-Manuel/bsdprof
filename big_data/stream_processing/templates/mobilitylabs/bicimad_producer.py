@@ -1,8 +1,10 @@
 from mobilitylabs.bicimad import BiciMad
+from confluent_kafka import Producer
 import configparser
 import argparse
 import logging
 import pprint
+import socket
 import sys
 import os
 
@@ -23,7 +25,7 @@ def kafka_producer_decorator(broker, topic):
                     A function ready to publish messages to a specific topic and Kafka broker.
   '''
 
-  def kafka_producer_action(content):
+  def kafka_producer_action(content, action):
     ''' Function with the logic to publish messages into a Kafka topic. THIS IS THE FUNCTION
         WHERE YOU HAVE TO WORK ON.
 
@@ -31,23 +33,36 @@ def kafka_producer_decorator(broker, topic):
                     content (list): List of dictionaries (JSON) documents; if only one JSON
                                     document is returned from the web service, the list will
                                     only have 1 element.
+                    action (string): The action specified by the user in the command line.
 
             Returns:
                     This function doesn't return anything.
     '''
+    conf = {'bootstrap.servers': broker,
+            'client.id': socket.gethostname()}
+    csv_record= ""
 
     if isinstance(content, list):
+
+      producer = Producer(conf) 
+      # 1. JSON to CSV format
       for item in content:
-        # add your logic to publish into the topic here
-        #
-        pass
+        if action == "info_bike" or action == "info_bikes":
+          csv_record = "%d|%s|%s|%d|%s" % \
+                       (item['qrcode'],item['datePosition'],item['Tracker-ioMovement'],\
+                        item['Speed'],item['state'])
+        # 2. Display the CSV record
+        print(csv_record)
+        # 3. Publish the CSV record in the kafka topic
+        producer.produce(topic, value=csv_record)
+        producer.flush()
     else:
       print("No contents received. Nothing will be published into the topic.")
       logging.info("No contents received. Nothing will be published into the topic.")
 
   return kafka_producer_action
 
-def pprint_action(content):
+def pprint_action(content, action):
   ''' Function displaying the content on the standard output (screen). Useful for debugging
       purposes.
 
@@ -55,11 +70,13 @@ def pprint_action(content):
                   content (list): List of dictionaries (JSON) documents; if only one JSON
                                   document is returned from the web service, the list will
                                   only have 1 element.
+                  action (string): The action specified by the user in the command line.
 
           Returns:
                   This function doesn't return anything.
   '''
 
+  print ("Results of action '%s':" % action)
   pp = pprint.PrettyPrinter(indent=2)
   pp.pprint(content)
 
@@ -92,7 +109,7 @@ def info_bike_stations_decorator(action_func):
     info_bike_stations = bicimad_service.info_bike_stations()
 
     if info_bike_stations!=None:
-      action_func(info_bike_stations)
+      action_func(info_bike_stations, "info_bike_stations")
     else:
       print("The BiciMAD GO service didn't return any data.")
 
@@ -126,7 +143,7 @@ def info_bike_station_decorator(action_func):
     info_bike_station = bicimad_service.info_bike_station(bike_station_id)
 
     if info_bike_station!=None:
-      action_func(info_bike_station)
+      action_func(info_bike_station, "info_bike_station")
     else:
       print("The BiciMAD GO service didn't return any data.")
 
@@ -158,7 +175,7 @@ def info_bikes_decorator(action_func):
     info_bikes = bicimad_service.info_bikes()
 
     if info_bikes!=None:
-      action_func(info_bikes)
+      action_func(info_bikes, "info_bikes")
     else:
       print("The BiciMAD GO service didn't return any data.")
 
@@ -191,7 +208,7 @@ def info_bike_decorator(action_func):
     info_bike= bicimad_service.info_bike(bike_id)
 
     if info_bike!=None:
-      action_func(info_bike)
+      action_func(info_bike, "info_bike")
     else:
       print("The BiciMAD GO service didn't return any data.")
 

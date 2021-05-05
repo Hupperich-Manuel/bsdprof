@@ -1,9 +1,11 @@
 from mobilitylabs.busemtmad import BusEMTMad
+from confluent_kafka import Producer
 from datetime import datetime
 import configparser
 import argparse
 import logging
 import pprint
+import socket
 import sys
 import os
 
@@ -25,7 +27,7 @@ def kafka_producer_decorator(broker, topic):
                     A function ready to publish messages to a specific topic and Kafka broker.
   '''
 
-  def kafka_producer_action(content):
+  def kafka_producer_action(content, action):
     ''' Function with the logic to publish messages into a Kafka topic. THIS IS THE FUNCTION
         WHERE YOU HAVE TO WORK ON.
 
@@ -33,23 +35,38 @@ def kafka_producer_decorator(broker, topic):
                     content (list): List of dictionaries (JSON) documents; if only one JSON
                                     document is returned from the web service, the list will
                                     only have 1 element.
+                    action (string): The action specified by the user in the command line.
 
             Returns:
                     This function doesn't return anything.
     '''
+    conf = {'bootstrap.servers': broker,
+            'client.id': socket.gethostname()}
+    csv_record= ""
 
+    producer = Producer(conf)
+    # 1. JSON to CSV format
     if isinstance(content, list):
       for item in content:
-        # add your logic to publish into the topic here
-        #
-        pass
+        if action == "buses_arrivals":
+          # Iterate over item['Arrive'] containing info of buses arrivingin real-time
+          for bus_arrival in item['Arrive']:
+            csv_record = "%s|%d|%s|%d|%d|%s|%d" % \
+                         (bus_arrival['stop'],bus_arrival['bus'],bus_arrival['line'],\
+                          bus_arrival['estimateArrive'],bus_arrival['DistanceBus'],\
+                          bus_arrival['destination'],bus_arrival['deviation'])
+            # 2. Display the CSV record
+            print(csv_record)
+            # 3. Publish the CSV record in the kafka topic
+            producer.produce(topic, value=csv_record)
+            producer.flush()
     else:
       print("No contents received. Nothing will be published into the topic.")
       logging.info("No contents received. Nothing will be published into the topic.")
 
   return kafka_producer_action
 
-def pprint_action(content):
+def pprint_action(content, action):
   ''' Function displaying the content on the standard output (screen). Useful for debugging
       purposes.
 
@@ -57,11 +74,13 @@ def pprint_action(content):
                   content (list): List of dictionaries (JSON) documents; if only one JSON
                                   document is returned from the web service, the list will
                                   only have 1 element.
+                  action (string): The action specified by the user in the command line.
 
           Returns:
                   This function doesn't return anything.
   '''
 
+  print ("Results of action '%s':" % action)
   pp = pprint.PrettyPrinter(indent=2)
   pp.pprint(content)
 
@@ -95,7 +114,7 @@ def info_lines_decorator(action_func):
     info_lines = busemtmad_service.info_lines(today_string)
 
     if info_lines!=None:
-      action_func(info_lines)
+      action_func(info_lines, "info_lines")
     else:
       print("The BusEMTMad service didn't return any data.")
 
@@ -130,7 +149,7 @@ def info_line_decorator(action_func):
     info_line = busemtmad_service.info_line(line_id, today_string)
 
     if info_line!=None:
-      action_func(info_line)
+      action_func(info_line, "info_line")
     else:
       print("The BusEMTMad  service didn't return any data.")
 
@@ -163,7 +182,7 @@ def info_stops_decorator(action_func):
     info_stops = busemtmad_service.info_stops()
 
     if info_stops!=None:
-      action_func(info_stops)
+      action_func(info_stops, "info_stops")
     else:
       print("The BusEMTMad service didn't return any data.")
 
@@ -197,7 +216,7 @@ def info_stop_decorator(action_func):
     info_stop = busemtmad_service.info_stop(stop_id)
 
     if info_stop!=None:
-      action_func(info_stop)
+      action_func(info_stop, "info_stop")
     else:
       print("The BusEMTMad  service didn't return any data.")
 
@@ -233,7 +252,7 @@ def line_stops_decorator(action_func):
     line_stops = busemtmad_service.line_stops(line_id, direction)
 
     if line_stops!=None:
-      action_func(line_stops)
+      action_func(line_stops, "line_stops")
     else:
       print("The BusEMTMad  service didn't return any data.")
 
@@ -267,7 +286,7 @@ def issues_decorator(action_func):
     issues = busemtmad_service.issues(stop_id)
 
     if issues!=None:
-      action_func(issues)
+      action_func(issues, "issues")
     else:
       print("The BusEMTMad  service didn't return any data.")
 
@@ -306,7 +325,7 @@ def buses_arrivals_decorator(action_func):
       buses_arrivals = busemtmad_service.buses_arrivals(stop_id)
 
     if buses_arrivals!=None:
-      action_func(buses_arrivals)
+      action_func(buses_arrivals, "buses_arrivals")
     else:
       print("The BusEMTMad  service didn't return any data.")
 

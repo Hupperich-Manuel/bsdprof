@@ -1,12 +1,42 @@
 from transportforlondon.bikepoint import BikePoint
+from confluent_kafka import Producer
 import argparse
 import logging
 import pprint
+import socket
 import sys
 import os
 
 # Auxiliary functions
 #
+def getAdditionalProperties(l_additional_props, l_keys_to_retrieve):
+  ''' Auxiliar function that helps to get some keys from the list of additional properties,
+      which is actually a list of JSON documents and it's not easy to query by key name.
+      to publish messages to a specific topic and Kafka broker.
+
+            Parameters:
+                    l_additional_props (list): list of JSON documents provided by the service.
+                    l_keys_to_retrieve (list): list of the JSON documents we are interested in,
+                                               which is specified by provided the key of every 
+                                               JSON document.
+
+            Returns:
+                    a dictionary containing they key and the value of the JSON documents of 
+                    interest.
+  '''
+ 
+  d_kv = {}
+
+  # 1. Go over all the additional properties.
+  for additional_prop in l_additional_props:
+
+    # 2. Get the key of the current additional property and check it with the list of interest.
+    key = additional_prop['key']
+    if key in l_keys_to_retrieve:
+      # 3. Add the key and value to the dictionary if it's in the list.
+      d_kv[key] = additional_prop['value']
+
+  return d_kv
 
 # Action functions for the functions calling the REST API
 #
@@ -22,7 +52,7 @@ def kafka_producer_decorator(broker, topic):
                     A function ready to publish messages to a specific topic and Kafka broker.
   '''
 
-  def kafka_producer_action(content):
+  def kafka_producer_action(content, action):
     ''' Function with the logic to publish messages into a Kafka topic. THIS IS THE FUNCTION
         WHERE YOU HAVE TO WORK ON.
 
@@ -30,27 +60,50 @@ def kafka_producer_decorator(broker, topic):
                     content (list): List of dictionaries (JSON) documents; if only one JSON
                                     document is returned from the web service, the list will
                                     only have 1 element.
+                    action (string): The action specified by the user in the command line.
 
             Returns:
                     This function doesn't return anything.
     '''
+    conf = {'bootstrap.servers': broker,
+            'client.id': socket.gethostname()}
+    csv_record= ""
 
+    producer = Producer(conf)
     if isinstance(content, list):
-      # Getting an array from the source
-      for item in content:
-        # add your logic to publish into the topic here
-        #
-        pass
+      # 1. JSON to CSV format
+      if action == "info_bikepoint_locations":
+        for item in content:
+          d_props = getAdditionalProperties(item['additionalProperties'],\
+                                            ['NbBikes','NbEmptyDocks','NbDocks'])
+          csv_record = "%s|%s|%s|%s|%s" % \
+                       (item['id'],item['commonName'],d_props['NbBikes'],\
+                        d_props['NbEmptyDocks'],d_props['NbDocks'])
+          # 2. Display the CSV record
+          print(csv_record)
+          # 3. Publish the CSV record in the kafka topic
+          producer.produce(topic, value=csv_record)
+          producer.flush()
     elif content!=None:
-      # Getting a single element from the source
-      pass
+      # 1. JSON to CSV format
+      if action == "info_bikepoint":
+        d_props = getAdditionalProperties(content['additionalProperties'],\
+                                          ['NbBikes','NbEmptyDocks','NbDocks'])
+        csv_record = "%s|%s|%s|%s|%s" % \
+                     (content['id'],content['commonName'],d_props['NbBikes'],\
+                      d_props['NbEmptyDocks'],d_props['NbDocks'])
+        # 2. Display the CSV record
+        print(csv_record)
+        # 3. Publish the CSV record in the kafka topic
+        producer.produce(topic, value=csv_record)
+        producer.flush()
     else:
       print("No contents received. Nothing will be published into the topic.")
       logging.info("No contents received. Nothing will be published into the topic.")
 
   return kafka_producer_action
 
-def pprint_action(content):
+def pprint_action(content, action):
   ''' Function displaying the content on the standard output (screen). Useful for debugging
       purposes.
 
@@ -58,11 +111,13 @@ def pprint_action(content):
                   content (list): List of dictionaries (JSON) documents; if only one JSON
                                   document is returned from the web service, the list will
                                   only have 1 element.
+                  action (string): The action specified by the user in the command line.
 
           Returns:
                   This function doesn't return anything.
   '''
 
+  print ("Results of action '%s':" % action)
   pp = pprint.PrettyPrinter(indent=2)
   pp.pprint(content)
 
@@ -95,7 +150,7 @@ def info_bikepoint_locations_decorator(action_func):
     info_bikepoint_locations = bikepoint_service.info_bikepoint_locations()
 
     if info_bikepoint_locations!=None:
-      action_func(info_bikepoint_locations)
+      action_func(info_bikepoint_locations, "info_bikepoint_locations")
     else:
       print("The BikePoint API didn't return any data.")
 
@@ -129,7 +184,7 @@ def info_bikepoint_decorator(action_func):
     info_bikepoint = bikepoint_service.info_bikepoint(bikepoint_id)
 
     if info_bikepoint!=None:
-      action_func(info_bikepoint)
+      action_func(info_bikepoint, "info_bikepoint")
     else:
       print("The BikePoint API didn't return any data.")
 

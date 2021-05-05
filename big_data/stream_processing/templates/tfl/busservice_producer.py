@@ -1,7 +1,9 @@
 from transportforlondon.busservice import BusService
+from confluent_kafka import Producer
 import argparse
 import logging
 import pprint
+import socket
 import sys
 import os
 
@@ -22,7 +24,7 @@ def kafka_producer_decorator(broker, topic):
                     A function ready to publish messages to a specific topic and Kafka broker.
   '''
 
-  def kafka_producer_action(content):
+  def kafka_producer_action(content, action):
     ''' Function with the logic to publish messages into a Kafka topic. THIS IS THE FUNCTION
         WHERE YOU HAVE TO WORK ON.
 
@@ -30,19 +32,34 @@ def kafka_producer_decorator(broker, topic):
                     content (list): List of dictionaries (JSON) documents; if only one JSON
                                     document is returned from the web service, the list will
                                     only have 1 element.
+                    action (string): The action specified by the user in the command line.
 
             Returns:
                     This function doesn't return anything.
     '''
+    conf = {'bootstrap.servers': broker,
+            'client.id': socket.gethostname()}
+    csv_record= ""
+
+    producer = Producer(conf)
 
     if isinstance(content, list):
       # Getting an array from the source
       for item in content:
-        # add your logic to publish into the topic here
-        #
-        pass
+        # 1. JSON to CSV format
+        if action == "status_bus_lines" or action == "status_bus_line":
+          status_severity = item['lineStatuses'][0]['statusSeverity'] 
+          status_severity_desc = item['lineStatuses'][0]['statusSeverityDescription'] 
+          service_type = item['serviceTypes'][0]['name'] 
+          csv_record = "%s|%s|%s|%s|%s" % \
+                       (item['name'],status_severity,status_severity_desc,\
+                        service_type, item['modified'])
+          # 2. Display the CSV record
+          print(csv_record)
+          # 3. Publish the CSV record in the kafka topic
+          producer.produce(topic, value=csv_record)
+          producer.flush()
     elif content!=None:
-      # Getting a single element from the source
       pass
     else:
       print("No contents received. Nothing will be published into the topic.")
@@ -50,7 +67,7 @@ def kafka_producer_decorator(broker, topic):
 
   return kafka_producer_action
 
-def pprint_action(content):
+def pprint_action(content, action):
   ''' Function displaying the content on the standard output (screen). Useful for debugging
       purposes.
 
@@ -58,11 +75,13 @@ def pprint_action(content):
                   content (list): List of dictionaries (JSON) documents; if only one JSON
                                   document is returned from the web service, the list will
                                   only have 1 element.
+                  action (string): The action specified by the user in the command line.
 
           Returns:
                   This function doesn't return anything.
   '''
 
+  print ("Results of action '%s':" % action)
   pp = pprint.PrettyPrinter(indent=2)
   pp.pprint(content)
 
@@ -95,7 +114,7 @@ def info_bus_lines_decorator(action_func):
     info_bus_lines = bus_service.info_bus_lines()
 
     if info_bus_lines!=None:
-      action_func(info_bus_lines)
+      action_func(info_bus_lines, "info_bus_lines")
     else:
       print("The Line API didn't return any data.")
 
@@ -128,7 +147,7 @@ def status_bus_lines_decorator(action_func):
     status_bus_lines = bus_service.status_bus_lines()
 
     if status_bus_lines!=None:
-      action_func(status_bus_lines)
+      action_func(status_bus_lines, "status_bus_lines")
     else:
       print("The Line API didn't return any data.")
 
@@ -162,7 +181,7 @@ def status_bus_line_decorator(action_func):
     status_bus_line = bus_service.status_bus_line(bus_line_id)
 
     if status_bus_line!=None:
-      action_func(status_bus_line)
+      action_func(status_bus_line, "status_bus_line")
     else:
       print("The Line API didn't return any data.")
 
