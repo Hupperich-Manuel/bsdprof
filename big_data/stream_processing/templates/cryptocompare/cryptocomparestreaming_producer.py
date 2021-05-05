@@ -171,6 +171,8 @@ class CryptoCompareStreaming:
 
             Parameters:
                     ws (WebSocket): reference to the established websocket
+                    data (string): data coming from CryptoCompare; the string contains a
+                                   JSON document.
 
             Returns:
                     nothing
