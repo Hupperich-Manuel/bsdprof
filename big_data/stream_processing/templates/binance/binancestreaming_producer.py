@@ -30,10 +30,12 @@ def binance_callback_decorator(producer, topic):
     logging.debug(f"message={message}")
     if message != None:
       event_type = message['e']
+      # 1. Log the message for debugging purposes
       logging.info(f"{event_to_csv(event_type, message)}")
-      # 1. Publish the CSV record in the kafka topic
-      producer.produce(topic, value=event_to_csv(event_type, message))
-      producer.flush()
+      # 2. Publish the CSV record in the kafka topic if the producer is set up
+      if producer != None:
+        producer.produce(topic, value=event_to_csv(event_type, message))
+        producer.flush()
 
   return stream_callback
 
